@@ -10,6 +10,7 @@ import (
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/pointcloud"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/robot/framesystem"
 	"go.viam.com/rdk/spatialmath"
 
 	"github.com/erh/vmodutils"
@@ -75,6 +76,10 @@ func newMultipleArmPoses(ctx context.Context, deps resource.Dependencies, config
 		}
 		cc.positions = append(cc.positions, s)
 	}
+	cc.fsSvc, err = framesystem.FromDependencies(deps)
+	if err != nil {
+		return nil, err
+	}
 
 	return cc, nil
 }
@@ -85,6 +90,8 @@ type MultipleArmPosesCamera struct {
 
 	name resource.Name
 	cfg  *MultipleArmPosesConfig
+
+	fsSvc framesystem.Service
 
 	src       camera.Camera
 	positions []toggleswitch.Switch
@@ -107,38 +114,7 @@ func (mapc *MultipleArmPosesCamera) DoCommand(ctx context.Context, cmd map[strin
 }
 
 func (mapc *MultipleArmPosesCamera) NextPointCloud(ctx context.Context, extra map[string]interface{}) (pointcloud.PointCloud, error) {
-	inputs := []pointcloud.PointCloud{}
-	totalSize := 0
-
-	for _, p := range mapc.positions {
-
-		err := p.SetPosition(ctx, 2, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		time.Sleep(mapc.cfg.sleepTime())
-
-		pc, err := mapc.src.NextPointCloud(ctx, extra)
-		if err != nil {
-			return nil, err
-		}
-
-		totalSize += pc.Size()
-
-		inputs = append(inputs, pc)
-	}
-
-	big := pointcloud.NewBasicPointCloud(totalSize)
-
-	for _, pc := range inputs {
-		err := pointcloud.ApplyOffset(pc, nil, big)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return big, nil
+	return GetMergedPointCloud(ctx, mapc.positions, mapc.cfg.sleepTime(), mapc.src, extra, mapc.fsSvc)
 }
 
 func (mapc *MultipleArmPosesCamera) Properties(ctx context.Context) (camera.Properties, error) {
