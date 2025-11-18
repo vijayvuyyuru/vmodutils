@@ -159,7 +159,7 @@ func updateComponentAttributesInPlace(ctx context.Context, robotConfig map[strin
 func updateComponentOrServiceConfig(robotConfig map[string]interface{}, name resource.Name, newAttr utils.AttributeMap) (bool, error) {
 	cs, ok := robotConfig["components"].([]interface{})
 	if !ok {
-		return false, fmt.Errorf("no components %T", robotConfig["components"])
+		cs = []interface{}{}
 	}
 	services, ok := robotConfig["services"].([]interface{})
 	if ok {
