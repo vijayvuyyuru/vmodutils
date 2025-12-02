@@ -195,6 +195,9 @@ func PCToImage(pc pointcloud.PointCloud) image.Image {
 
 		img.Set(x, y, d.Color())
 
+		if p.Z == 0 {
+			p.Z = .0001
+		}
 		bestZ[key] = p.Z
 
 		return true
