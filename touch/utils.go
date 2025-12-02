@@ -179,13 +179,12 @@ func PCToImage(pc pointcloud.PointCloud) image.Image {
 
 	img := image.NewRGBA(r)
 
-	bestZ := make([]float64, xScale*yScale) //map[int]float64{}
-
+	bestZ := make([]float64, (1+r.Max.X)*(1+r.Max.Y)) //map[int]float64{}
 	pc.Iterate(0, 0, func(p r3.Vector, d pointcloud.Data) bool {
 		x := int(p.X) + xScale
 		y := int(p.Y) + yScale
 
-		key := (y * yScale) + x
+		key := (y * r.Max.X) + x
 		oldZ := bestZ[key]
 		ok := oldZ != 0
 		if ok {
