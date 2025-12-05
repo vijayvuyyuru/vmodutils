@@ -235,6 +235,89 @@ func realMain() error {
 		return nil
 	}
 
+	if *cmd == "detections" {
+		machine, err := vmodutils.ConnectToHostFromCLIToken(ctx, *host, logger)
+		if err != nil {
+			return err
+		}
+		defer machine.Close(ctx)
+
+		myVision, err := vision.FromRobot(machine, *visionName)
+		if err != nil {
+			return err
+		}
+
+		detections, err := myVision.DetectionsFromCamera(ctx, "", nil)
+		if err != nil {
+			return err
+		}
+
+		for idx, d := range detections {
+			logger.Infof("detection %d: %v", idx, d)
+		}
+		return nil
+	}
+
+	if *cmd == "object-crop" {
+		machine, err := vmodutils.ConnectToHostFromCLIToken(ctx, *host, logger)
+		if err != nil {
+			return err
+		}
+		defer machine.Close(ctx)
+
+		myVision, err := vision.FromRobot(machine, *visionName)
+		if err != nil {
+			return err
+		}
+
+		myCamera, err := camera.FromRobot(machine, *cameraName)
+		if err != nil {
+			return err
+		}
+
+		props, err := myCamera.Properties(ctx)
+		if err != nil {
+			return fmt.Errorf("Properties call failed: %w", err)
+		}
+
+		detections, err := myVision.DetectionsFromCamera(ctx, "", nil)
+		if err != nil {
+			return err
+		}
+
+		for idx, d := range detections {
+			logger.Infof("detection %d: %v", idx, d)
+		}
+
+		pc, err := myCamera.NextPointCloud(ctx, nil)
+		if err != nil {
+			return err
+		}
+
+		sizeBefore := pc.Size()
+		pc, err = touch.PCDetectCrop(pc, detections, props)
+		if err != nil {
+			return err
+		}
+		logger.Infof("size went from %d to %d", sizeBefore, pc.Size())
+
+		fn := "out.pcd"
+		f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		err = pointcloud.ToPCD(pc, f, pointcloud.PCDBinary)
+		if err != nil {
+			return err
+		}
+
+		logger.Infof("wrote result to %s", fn)
+
+		return nil
+	}
+
 	return fmt.Errorf("invalid command [%s]", *cmd)
 
 }
