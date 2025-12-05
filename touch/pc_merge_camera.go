@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.viam.com/rdk/components/camera"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/pointcloud"
 	"go.viam.com/rdk/resource"
@@ -87,7 +88,7 @@ func (mapc *MergeCamera) Image(ctx context.Context, mimeType string, extra map[s
 		return nil, camera.ImageMetadata{}, err
 	}
 
-	return data, camera.ImageMetadata{mimeType}, err
+	return data, camera.ImageMetadata{MimeType: mimeType}, err
 }
 
 func (mapc *MergeCamera) Images(ctx context.Context, filterSourceNames []string, extra map[string]interface{}) ([]camera.NamedImage, resource.ResponseMetadata, error) {
@@ -97,7 +98,7 @@ func (mapc *MergeCamera) Images(ctx context.Context, filterSourceNames []string,
 	}
 	img := PCToImage(pc)
 
-	ni, err := camera.NamedImageFromImage(img, "cropped", "image/png")
+	ni, err := camera.NamedImageFromImage(img, "cropped", "image/png", data.Annotations{})
 	if err != nil {
 		return nil, resource.ResponseMetadata{}, err
 	}

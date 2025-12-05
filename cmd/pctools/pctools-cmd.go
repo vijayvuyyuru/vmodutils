@@ -68,7 +68,7 @@ func realMain() error {
 			return err
 		}
 
-		pc, err := myCamera.NextPointCloud(ctx)
+		pc, err := myCamera.NextPointCloud(ctx, nil)
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ func realMain() error {
 			return err
 		}
 
-		pc, err := myCamera.NextPointCloud(ctx)
+		pc, err := myCamera.NextPointCloud(ctx, nil)
 		if err != nil {
 			return err
 		}

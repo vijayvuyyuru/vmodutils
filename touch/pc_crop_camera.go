@@ -9,6 +9,7 @@ import (
 	"github.com/golang/geo/r3"
 
 	"go.viam.com/rdk/components/camera"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/pointcloud"
 	"go.viam.com/rdk/resource"
@@ -104,7 +105,7 @@ func (cc *cropCamera) Image(ctx context.Context, mimeType string, extra map[stri
 		return nil, camera.ImageMetadata{}, err
 	}
 
-	return data, camera.ImageMetadata{mimeType}, err
+	return data, camera.ImageMetadata{MimeType: mimeType}, err
 }
 
 func (cc *cropCamera) Images(ctx context.Context, filterSourceNames []string, extra map[string]interface{}) ([]camera.NamedImage, resource.ResponseMetadata, error) {
@@ -118,7 +119,7 @@ func (cc *cropCamera) Images(ctx context.Context, filterSourceNames []string, ex
 	if elapsed > (time.Millisecond * 100) {
 		cc.logger.Infof("PCToImage took %v", elapsed)
 	}
-	ni, err := camera.NamedImageFromImage(img, "cropped", "image/png")
+	ni, err := camera.NamedImageFromImage(img, "cropped", "image/png", data.Annotations{})
 	if err != nil {
 		return nil, resource.ResponseMetadata{}, err
 	}
