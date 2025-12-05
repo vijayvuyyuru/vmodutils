@@ -8,14 +8,14 @@
     {
         "api": "rdk:component:camera",
         "model": "erh:vmodutils:pc-crop-camera",
-        "markdown_link": "README.md#pc-detect-crop-camera",
-        "short_description": "crops a pointcloud based on vision detections"
+        "markdown_link": "README.md#pc-crop-camera",
+        "short_description": "crops a pointcloud"
     },
     {
         "api": "rdk:component:camera",
         "model": "erh:vmodutils:pc-detect-crop-camera",
-        "markdown_link": "README.md#pc-crop-camera",
-        "short_description": "crops a pointcloud"
+        "markdown_link": "README.md#pc-detect-crop-camera",
+        "short_description": "crops a pointcloud based on vision detections"
     },
     {
         "api": "rdk:component:camera",
