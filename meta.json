@@ -53,8 +53,11 @@
         "model": "erh:vmodutils:pc-cluster"
     },
     {
-         "api": "rdk:component:camera",
-        "model": "erh:vmodutils:pc-look-at-crop-camera"
+        "api": "rdk:component:camera",
+        "model": "erh:vmodutils:pc-look-at-crop-camera",
+        "markdown_link": "README.md#pc-look-at-crop-camera",
+        "short_description": "looks at the center of a point cloud and gets just that"
+
     }
   ],
   "applications": null,

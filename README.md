@@ -74,3 +74,12 @@ Configure this with a frame and you can have obstacles on your robot without hav
   "motion" : <needed it to_move, but will also default to builtin>
 }
 ```
+
+## pc look at crop camera
+looks at the center of a point cloud and gets just that
+```
+{
+    "src" : "<camera>",
+    "use_color" : "<bool>" // optional
+}
+```
