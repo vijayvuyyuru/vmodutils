@@ -25,7 +25,7 @@ func TestSanding2(t *testing.T) {
 	in, err := pointcloud.NewFromFile("data/sanding2.pcd", "")
 	test.That(t, err, test.ShouldBeNil)
 
-	look, err := PCLimitToImageBoxes(in, []*image.Rectangle{box}, nil, rsProperties)
+	look, err := PCLimitToImageBoxes(in, []*image.Rectangle{box}, nil, RealSenseProperties)
 	test.That(t, err, test.ShouldBeNil)
 
 	logger.Infof("size: %d", look.Size())
