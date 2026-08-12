@@ -271,14 +271,21 @@ func writeFilesForPosition(ctx context.Context, traceID string, pos int, pc poin
 	return nil
 }
 
-func GetMergedPointCloudFromPositions(ctx context.Context, positions []toggleswitch.Switch, sleepTime time.Duration, srcCamera camera.Camera, extraForCamera map[string]any, fsSvc framesystem.Service, writeFilesToCaptureDirectory bool) (pointcloud.PointCloud, error) {
-	pcsInWorld := []pointcloud.PointCloud{}
-	totalSize := 0
+// ScanRefiner adjusts a world-frame scan before it joins the merged cloud, given the
+// merge of all scans so far. mergedSoFar is empty for the first scan. Returning the
+// scan unchanged is valid.
+type ScanRefiner func(ctx context.Context, mergedSoFar, scan pointcloud.PointCloud) (pointcloud.PointCloud, error)
 
+func GetMergedPointCloudFromPositions(ctx context.Context, positions []toggleswitch.Switch, sleepTime time.Duration, srcCamera camera.Camera, extraForCamera map[string]any, fsSvc framesystem.Service, writeFilesToCaptureDirectory bool) (pointcloud.PointCloud, error) {
+	return GetMergedPointCloudFromPositionsWithRefiner(ctx, positions, sleepTime, srcCamera, extraForCamera, fsSvc, writeFilesToCaptureDirectory, nil)
+}
+
+func GetMergedPointCloudFromPositionsWithRefiner(ctx context.Context, positions []toggleswitch.Switch, sleepTime time.Duration, srcCamera camera.Camera, extraForCamera map[string]any, fsSvc framesystem.Service, writeFilesToCaptureDirectory bool, refiner ScanRefiner) (pointcloud.PointCloud, error) {
 	// If a traceID is present, we will write files to a traceID sub-directory in the capture directory.
 	// Otherwise, we will write files at the top-level of the capture directory.
 	traceID := getTraceID(ctx)
 
+	big := pointcloud.NewBasicPointCloud(0)
 	for i, p := range positions {
 		err := p.SetPosition(ctx, 2, nil)
 		if err != nil {
@@ -288,43 +295,7 @@ func GetMergedPointCloudFromPositions(ctx context.Context, positions []toggleswi
 		// Sleep between movements to allow for any vibrations to settle
 		time.Sleep(sleepTime)
 
-		pc, err := srcCamera.NextPointCloud(ctx, extraForCamera)
-		if err != nil {
-			return nil, err
-		}
-
-		totalSize += pc.Size()
-
-		// Transform this point cloud into the world frame
-		pif, err := fsSvc.GetPose(ctx, srcCamera.Name().Name, "", nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		pcInWorld := pointcloud.NewBasicPointCloud(pc.Size())
-		err = pointcloud.ApplyOffset(pc, pif.Pose(), pcInWorld)
-		if err != nil {
-			return nil, err
-		}
-
-		pcsInWorld = append(pcsInWorld, pcInWorld)
-
-		if writeFilesToCaptureDirectory {
-			images, imagesMd, err := srcCamera.Images(ctx, nil, nil)
-			if err != nil {
-				return nil, fmt.Errorf("couldn't get images from camera: %w", err)
-			}
-			if err := writeFilesForPosition(ctx, traceID, i, pc, pif, pcInWorld, images, imagesMd); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Merge the individual pointclouds into one pointcloud
-
-	big := pointcloud.NewBasicPointCloud(totalSize)
-	for _, pcInWorld := range pcsInWorld {
-		err := pointcloud.ApplyOffset(pcInWorld, nil, big)
-		if err != nil {
+		if err := captureAndMergeScan(ctx, i, srcCamera, extraForCamera, fsSvc, writeFilesToCaptureDirectory, traceID, refiner, big); err != nil {
 			return nil, err
 		}
 	}
@@ -338,6 +309,54 @@ func GetMergedPointCloudFromPositions(ctx context.Context, positions []toggleswi
 	}
 
 	return big, nil
+}
+
+// captureAndMergeScan captures one scan from srcCamera, transforms it into the world
+// frame, optionally refines it against the scans merged so far, and merges it into big.
+func captureAndMergeScan(ctx context.Context, pos int, srcCamera camera.Camera, extraForCamera map[string]any, fsSvc framesystem.Service, writeFilesToCaptureDirectory bool, traceID string, refiner ScanRefiner, big pointcloud.PointCloud) error {
+	pc, err := srcCamera.NextPointCloud(ctx, extraForCamera)
+	if err != nil {
+		return err
+	}
+
+	// Transform this point cloud into the world frame
+	pif, err := fsSvc.GetPose(ctx, srcCamera.Name().Name, "", nil, nil)
+	if err != nil {
+		return err
+	}
+	pcInWorld := pointcloud.NewBasicPointCloud(pc.Size())
+	if err := pointcloud.ApplyOffset(pc, pif.Pose(), pcInWorld); err != nil {
+		return err
+	}
+
+	if writeFilesToCaptureDirectory {
+		images, imagesMd, err := srcCamera.Images(ctx, nil, nil)
+		if err != nil {
+			return fmt.Errorf("couldn't get images from camera: %w", err)
+		}
+		if err := writeFilesForPosition(ctx, traceID, pos, pc, pif, pcInWorld, images, imagesMd); err != nil {
+			return err
+		}
+	}
+
+	merged := pcInWorld
+	if refiner != nil {
+		merged, err = refiner(ctx, big, pcInWorld)
+		if err != nil {
+			return err
+		}
+		if writeFilesToCaptureDirectory {
+			// Named so it does not match tooling that discovers scans by the
+			// "imaging_world_frame" substring.
+			dirPath := file_utils.GetPathInCaptureDir(fmt.Sprintf("tag=%s", traceID))
+			name := "imaging_refined_" + referenceframe.World + "_frame_" + strconv.Itoa(pos) + ".pcd"
+			if err := file_utils.SavePointCloudFile(merged, dirPath, name, time.Now()); err != nil {
+				return err
+			}
+		}
+	}
+
+	return pointcloud.ApplyOffset(merged, nil, big)
 }
 
 func buildWorldStateWithObstacles(ctx context.Context, visionSvcs []vision.Service) (*referenceframe.WorldState, error) {
@@ -488,9 +507,10 @@ func floatsToInputs(j []float64) []referenceframe.Input {
 }
 
 func GetMergedPointCloudFromMultiPositionSwitch(ctx context.Context, s toggleswitch.Switch, sleepTime time.Duration, srcCamera camera.Camera, extraForCamera map[string]any, fsSvc framesystem.Service, writeFilesToCaptureDirectory bool) (pointcloud.PointCloud, error) {
-	pcsInWorld := []pointcloud.PointCloud{}
-	totalSize := 0
+	return GetMergedPointCloudFromMultiPositionSwitchWithRefiner(ctx, s, sleepTime, srcCamera, extraForCamera, fsSvc, writeFilesToCaptureDirectory, nil)
+}
 
+func GetMergedPointCloudFromMultiPositionSwitchWithRefiner(ctx context.Context, s toggleswitch.Switch, sleepTime time.Duration, srcCamera camera.Camera, extraForCamera map[string]any, fsSvc framesystem.Service, writeFilesToCaptureDirectory bool, refiner ScanRefiner) (pointcloud.PointCloud, error) {
 	// If a traceID is present, we will write files to a traceID sub-directory in the capture directory.
 	// Otherwise, we will write files at the top-level of the capture directory.
 	traceID := getTraceID(ctx)
@@ -499,6 +519,7 @@ func GetMergedPointCloudFromMultiPositionSwitch(ctx context.Context, s toggleswi
 	if err != nil {
 		return nil, err
 	}
+	big := pointcloud.NewBasicPointCloud(0)
 	for i := range numPositions {
 		err := s.SetPosition(ctx, i, nil)
 		if err != nil {
@@ -508,42 +529,7 @@ func GetMergedPointCloudFromMultiPositionSwitch(ctx context.Context, s toggleswi
 		// Sleep between movements to allow for any vibrations to settle
 		time.Sleep(sleepTime)
 
-		pc, err := srcCamera.NextPointCloud(ctx, extraForCamera)
-		if err != nil {
-			return nil, err
-		}
-
-		totalSize += pc.Size()
-
-		// Transform this point cloud into the world frame
-		pif, err := fsSvc.GetPose(ctx, srcCamera.Name().Name, "", nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		pcInWorld := pointcloud.NewBasicPointCloud(pc.Size())
-		err = pointcloud.ApplyOffset(pc, pif.Pose(), pcInWorld)
-		if err != nil {
-			return nil, err
-		}
-
-		pcsInWorld = append(pcsInWorld, pcInWorld)
-
-		if writeFilesToCaptureDirectory {
-			images, imagesMd, err := srcCamera.Images(ctx, nil, nil)
-			if err != nil {
-				return nil, fmt.Errorf("couldn't get images from camera: %w", err)
-			}
-
-			if err := writeFilesForPosition(ctx, traceID, int(i), pc, pif, pcInWorld, images, imagesMd); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	big := pointcloud.NewBasicPointCloud(totalSize)
-	for _, pcInWorld := range pcsInWorld {
-		err := pointcloud.ApplyOffset(pcInWorld, nil, big)
-		if err != nil {
+		if err := captureAndMergeScan(ctx, int(i), srcCamera, extraForCamera, fsSvc, writeFilesToCaptureDirectory, traceID, refiner, big); err != nil {
 			return nil, err
 		}
 	}
